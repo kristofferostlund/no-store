@@ -15,16 +15,14 @@ import (
 )
 
 const ServerClosedErrorMessage = "http: Server closed"
-const Address = "0.0.0.0"
-const Port = 4000
 
 type server struct {
 	router     *way.Router
 	httpServer *http.Server
 }
 
-func Serve() {
-	addr := fmt.Sprintf("%s:%d", Address, Port)
+func Serve(address string, port int) {
+	addr := fmt.Sprintf("%s:%d", address, port)
 	srv := server{
 		router:     way.NewRouter(),
 		httpServer: &http.Server{Addr: addr},
