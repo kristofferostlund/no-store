@@ -2,10 +2,9 @@ package server
 
 import (
 	"fmt"
-	"io/ioutil"
+	"math"
 	"net/http"
 	"net/url"
-	"strconv"
 	"time"
 
 	"github.com/kristofferostlund/no-store/nostore"
@@ -17,7 +16,16 @@ import (
 var DefaultInterval = time.Duration(time.Minute * 10)
 
 func (s *server) handleGetSecret() http.HandlerFunc {
-	type response struct{}
+	type response struct {
+		Value     string    `json:"value"`
+		ExpiresAt time.Time `json:"expiresAt"`
+		ExpiresIn int64     `json:"expiresIn"`
+	}
+
+	type expiredResponse struct {
+		Reason    string    `json:"reason"`
+		ExpiredAt time.Time `json:"expiredAt"`
+	}
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		query := r.URL.Query()
@@ -25,65 +33,84 @@ func (s *server) handleGetSecret() http.HandlerFunc {
 		secrets, exists := query["secret"]
 		if !exists {
 			logrus.Warnf("Missing secrets parameter: %+v", query)
-			http.Error(w, "secret is a required parameter", http.StatusBadRequest)
+			helpers.ErrorJSONResponse(w, "secret is a required parameter", http.StatusBadRequest)
 			return
 		}
 
-		decodedBytes, expired, err := nostore.Decode(secrets[0])
+		decodedBytes, expiresAt, expired, err := nostore.Decode(secrets[0])
 		if err != nil {
 			logrus.Errorf("Failed to decode secret: %v", err)
-			http.Error(w, "Can't decode secret", http.StatusBadRequest)
+			helpers.ErrorJSONResponse(w, "Can't decode secret", http.StatusBadRequest)
 			return
 		}
 
 		if expired {
-			http.Error(w, "Secret is expired", 419)
+			re := expiredResponse{
+				Reason:    "Secret is expired",
+				ExpiredAt: expiresAt,
+			}
+
+			w.WriteHeader(http.StatusGone)
+			helpers.JSONResponse(w, re)
 			return
 		}
 
-		w.Write(decodedBytes)
+		helpers.JSONResponse(
+			w,
+			response{
+				Value:     string(decodedBytes),
+				ExpiresAt: expiresAt,
+				ExpiresIn: int64(math.Abs(time.Now().Sub(expiresAt).Seconds())),
+			},
+		)
 	}
 }
 
 func (s *server) handlePostSecret() http.HandlerFunc {
+	type request struct {
+		Value      string `json:"value"`
+		TTLSeconds int64  `json:"ttlSeconds"`
+	}
+
 	type response struct {
-		URL string `json:"url"`
+		URL       string    `json:"url"`
+		ExpiresAt time.Time `json:"expiresAt"`
+		ExpiresIn int64     `json:"expiresIn"`
 	}
 
 	return func(w http.ResponseWriter, r *http.Request) {
+		inbound := request{}
 		ttl := DefaultInterval
-		query := r.URL.Query()
 
-		if ttlStrings, exists := query["ttl"]; exists {
-			ttlSeconds, err := strconv.Atoi(ttlStrings[0])
-			if err != nil {
-				logrus.Warnf("Failed to parse ttl %s because %v", ttlStrings[0], err)
-			}
-
-			ttl = time.Duration(ttlSeconds) * time.Second
-		}
-
-		body, err := ioutil.ReadAll(r.Body)
-		if err != nil {
-			logrus.Errorf("Failed to read body: %v", err)
-			http.Error(w, "Can't read body", http.StatusBadRequest)
+		if err := helpers.FromJSONBody(r.Body, &inbound); err != nil {
+			logrus.Error(err)
+			helpers.ErrorJSONResponse(w, "Can't read body, is the format correct?", http.StatusBadRequest)
 			return
 		}
 
-		compressed, err := nostore.Encode(body, time.Now().Add(ttl))
+		if inbound.TTLSeconds != 0 {
+			ttl = time.Duration(inbound.TTLSeconds) * time.Second
+		}
+
+		resp := response{
+			ExpiresAt: time.Now().Add(ttl),
+			ExpiresIn: int64(ttl.Seconds()),
+		}
+
+		compressed, err := nostore.Encode([]byte(inbound.Value), resp.ExpiresAt)
 		if err != nil {
 			logrus.Errorf("Failed to encode body: %v", err)
-			http.Error(w, "Can't encode body", http.StatusBadRequest)
+			helpers.ErrorJSONResponse(w, "Can't encode body", http.StatusBadRequest)
 			return
 		}
 
-		url := fmt.Sprintf(
+		resp.URL = fmt.Sprintf(
 			"%s%s?secret=%s",
 			r.Host,
 			NoStoreSecretsPath,
 			url.QueryEscape(string(compressed)),
 		)
 
-		helpers.JSONResponse(w, response{URL: url})
+		helpers.JSONResponse(w, resp)
 	}
 }

@@ -34,37 +34,40 @@ func Encode(data []byte, until time.Time) (string, error) {
 	return base64Encode(encrypted), nil
 }
 
-func Decode(encoded string) ([]byte, bool, error) {
+func Decode(encoded string) ([]byte, time.Time, bool, error) {
 	output := []byte{}
 	now := time.Now().Unix()
+	expiresAt := time.Now()
 
 	decoded, err := base64Decode(encoded)
 	if err != nil {
-		return output, false, err
+		return output, expiresAt, false, err
 	}
 
 	decrypted, err := cryptopasta.Decrypt([]byte(decoded), encryptionKey)
 	if err != nil {
-		return output, false, err
+		return output, expiresAt, false, err
 	}
 
 	values := strings.Split(string(decrypted), ".")
 
 	until, err := strconv.ParseInt(string(values[0]), 10, 64)
 	if err != nil {
-		return output, false, err
+		return output, expiresAt, false, err
 	}
 
+	expiresAt = time.Unix(until, 0)
+
 	if now > until {
-		return output, true, nil
+		return output, expiresAt, true, nil
 	}
 
 	data, err := decompressString(values[1])
 	if err != nil {
-		return output, false, err
+		return output, expiresAt, false, err
 	}
 
-	return data, false, nil
+	return data, expiresAt, false, nil
 }
 
 func compressToString(data []byte) (string, error) {
