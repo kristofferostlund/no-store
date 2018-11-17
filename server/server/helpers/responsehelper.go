@@ -26,3 +26,8 @@ func JSONResponse(w http.ResponseWriter, data interface{}, httpCode int) {
 	w.WriteHeader(httpCode)
 	w.Write(jsonBytes)
 }
+
+func ErrorJSONResponse(w http.ResponseWriter, message string, httpCode int) {
+
+	JSONResponse(w, ErrorResponse{Message: message}, httpCode)
+}
