@@ -15,7 +15,7 @@ type ErrorResponse struct {
 	Message string `json:"message"`
 }
 
-func JSONResponse(w http.ResponseWriter, data interface{}) {
+func JSONResponse(w http.ResponseWriter, data interface{}, httpCode int) {
 	jsonBytes, err := json.Marshal(data)
 	if err != nil {
 		logrus.Errorf("Failed to marshal JSON response: %v", err)
@@ -23,11 +23,6 @@ func JSONResponse(w http.ResponseWriter, data interface{}) {
 	}
 
 	w.Header().Set("Content-Type", ContentTypeJSON)
-	w.Write(jsonBytes)
-}
-
-func ErrorJSONResponse(w http.ResponseWriter, message string, httpCode int) {
 	w.WriteHeader(httpCode)
-
-	JSONResponse(w, ErrorResponse{Message: message})
+	w.Write(jsonBytes)
 }

@@ -33,14 +33,14 @@ func (s *server) handleGetSecret() http.HandlerFunc {
 		secrets, exists := query["secret"]
 		if !exists {
 			logrus.Warnf("Missing secrets parameter: %+v", query)
-			helpers.ErrorJSONResponse(w, "secret is a required parameter", http.StatusBadRequest)
+			helpers.JSONResponse(w, "secret is a required parameter", http.StatusBadRequest)
 			return
 		}
 
 		decodedBytes, expiresAt, expired, err := nostore.Decode(secrets[0])
 		if err != nil {
 			logrus.Errorf("Failed to decode secret: %v", err)
-			helpers.ErrorJSONResponse(w, "Can't decode secret", http.StatusBadRequest)
+			helpers.JSONResponse(w, "Can't decode secret", http.StatusBadRequest)
 			return
 		}
 
@@ -50,8 +50,7 @@ func (s *server) handleGetSecret() http.HandlerFunc {
 				ExpiredAt: expiresAt,
 			}
 
-			w.WriteHeader(http.StatusGone)
-			helpers.JSONResponse(w, re)
+			helpers.JSONResponse(w, re, http.StatusGone)
 			return
 		}
 
@@ -62,6 +61,7 @@ func (s *server) handleGetSecret() http.HandlerFunc {
 				ExpiresAt: expiresAt,
 				ExpiresIn: int64(math.Abs(time.Now().Sub(expiresAt).Seconds())),
 			},
+			http.StatusOK,
 		)
 	}
 }
@@ -84,7 +84,7 @@ func (s *server) handlePostSecret() http.HandlerFunc {
 
 		if err := helpers.FromJSONBody(r.Body, &inbound); err != nil {
 			logrus.Error(err)
-			helpers.ErrorJSONResponse(w, "Can't read body, is the format correct?", http.StatusBadRequest)
+			helpers.JSONResponse(w, "Can't read body, is the format correct?", http.StatusBadRequest)
 			return
 		}
 
@@ -100,7 +100,7 @@ func (s *server) handlePostSecret() http.HandlerFunc {
 		compressed, err := nostore.Encode([]byte(inbound.Value), resp.ExpiresAt)
 		if err != nil {
 			logrus.Errorf("Failed to encode body: %v", err)
-			helpers.ErrorJSONResponse(w, "Can't encode body", http.StatusBadRequest)
+			helpers.JSONResponse(w, "Can't encode body", http.StatusBadRequest)
 			return
 		}
 
@@ -111,6 +111,6 @@ func (s *server) handlePostSecret() http.HandlerFunc {
 			url.QueryEscape(string(compressed)),
 		)
 
-		helpers.JSONResponse(w, resp)
+		helpers.JSONResponse(w, resp, http.StatusOK)
 	}
 }
