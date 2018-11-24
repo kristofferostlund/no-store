@@ -45,12 +45,12 @@ func (s *server) handleGetSecret() http.HandlerFunc {
 		}
 
 		if expired {
-			re := expiredResponse{
+			resp := expiredResponse{
 				Reason:    "Secret is expired",
 				ExpiredAt: expiresAt,
 			}
 
-			helpers.JSONResponse(w, re, http.StatusGone)
+			helpers.JSONResponse(w, resp, http.StatusGone)
 			return
 		}
 
@@ -107,7 +107,7 @@ func (s *server) handlePostSecret() http.HandlerFunc {
 		resp.URL = fmt.Sprintf(
 			"%s%s?secret=%s",
 			r.Host,
-			NoStoreSecretsPath,
+			TTLSecretsPath,
 			url.QueryEscape(string(compressed)),
 		)
 
